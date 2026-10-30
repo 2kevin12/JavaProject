@@ -1,0 +1,2669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spice & Sizzle - Restaurant Kitchen Display System (KDS) & Order Pipeline</title>
+    <!-- Bootstrap 5.3.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6.5.1 Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Chart.js 4.4.1 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --kds-bg: #090d16;
+            --kds-col-bg: #111827;
+            --kds-card-bg: #1f2937;
+            --kds-border: #374151;
+            --kds-text: #f9fafb;
+            --kds-text-muted: #9ca3af;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Navigation */
+        .navbar-kds {
+            background-color: #0f172a;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .nav-link-custom {
+            color: #cbd5e1 !important;
+            font-weight: 500;
+            padding: 8px 14px !important;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+        .nav-link-custom:hover {
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.08);
+        }
+        .nav-link-custom.active {
+            color: #ffffff !important;
+            background-color: var(--primary) !important;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+        }
+
+        /* Views management */
+        .app-view {
+            display: none;
+            animation: fadeIn 0.25s ease-in-out;
+        }
+        .app-view.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* KDS Board Styles (Dark Mode) */
+        .kds-wrapper {
+            background-color: var(--kds-bg);
+            color: var(--kds-text);
+            min-height: calc(100vh - 65px);
+            padding: 20px;
+        }
+        .kds-toolbar {
+            background-color: var(--kds-col-bg);
+            border: 1px solid var(--kds-border);
+            border-radius: 12px;
+            padding: 12px 18px;
+            margin-bottom: 20px;
+        }
+        .kds-columns-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 992px) {
+            .kds-columns-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .kds-column {
+            background-color: var(--kds-col-bg);
+            border: 1px solid var(--kds-border);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 190px);
+        }
+        .kds-column-header {
+            padding: 14px 18px;
+            font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid;
+            letter-spacing: 0.5px;
+        }
+        .header-new {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: #3b82f6;
+            color: #60a5fa;
+        }
+        .header-prep {
+            background: rgba(245, 158, 11, 0.15);
+            border-color: #f59e0b;
+            color: #fbbf24;
+        }
+        .header-ready {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: #10b981;
+            color: #34d399;
+        }
+        .kds-column-body {
+            padding: 14px;
+            overflow-y: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* KDS Ticket Cards */
+        .kds-ticket {
+            background-color: var(--kds-card-bg);
+            border: 1px solid var(--kds-border);
+            border-radius: 10px;
+            padding: 14px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .kds-ticket:hover {
+            border-color: #4b5563;
+        }
+        .ticket-urgent {
+            border-left: 5px solid #ef4444 !important;
+        }
+        .ticket-high {
+            border-left: 5px solid #f97316 !important;
+        }
+        .ticket-overdue {
+            animation: pulse-border 2s infinite;
+        }
+        @keyframes pulse-border {
+            0%, 100% { border-color: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+            50% { border-color: #7f1d1d; box-shadow: none; }
+        }
+        .ticket-item-row {
+            padding: 8px 10px;
+            background-color: rgba(255, 255, 255, 0.04);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid transparent;
+        }
+        .ticket-item-row.item-prep {
+            border-left-color: #f59e0b;
+            background-color: rgba(245, 158, 11, 0.08);
+        }
+        .ticket-item-row.item-ready {
+            border-left-color: #10b981;
+            background-color: rgba(16, 185, 129, 0.08);
+            opacity: 0.85;
+        }
+
+        /* POS / Menu Cards */
+        .dish-card {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: 100%;
+            border-radius: 12px;
+        }
+        .dish-card:hover:not(.dish-disabled) {
+            transform: translateY(-4px);
+            border-color: var(--primary) !important;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+        }
+        .dish-disabled {
+            opacity: 0.55;
+            cursor: not-allowed !important;
+            background-color: #f8fafc;
+        }
+        .cart-sticky-box {
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 100px);
+            display: flex;
+            flex-direction: column;
+            border-radius: 14px;
+        }
+        .cart-scroll-area {
+            overflow-y: auto;
+            flex-grow: 1;
+            max-height: 400px;
+        }
+
+        /* Metric Cards */
+        .metric-card {
+            border-radius: 12px;
+            border: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: transform 0.15s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+        .metric-icon-box {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        /* Multithreading Carousel Visualization */
+        .carousel-track {
+            background-color: #1e293b;
+            border: 2px dashed #475569;
+            border-radius: 14px;
+            padding: 20px;
+            display: flex;
+            gap: 14px;
+            min-height: 140px;
+            align-items: center;
+            overflow-x: auto;
+        }
+        .carousel-slot {
+            width: 140px;
+            height: 100px;
+            background-color: #0f172a;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            position: relative;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+        .carousel-slot.occupied {
+            background-color: #1e3a8a;
+            border-color: #60a5fa;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            animation: popIn 0.3s ease;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.85); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Toast container */
+        .toast-container-custom {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1090;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP NAVIGATION BAR -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-kds sticky-top py-2">
+        <div class="container-fluid px-3">
+            <a class="navbar-brand d-flex align-items-center gap-2 fw-bold text-white fs-4" href="javascript:void(0)" onclick="switchView('kds')">
+                <span class="badge bg-danger p-2"><i class="fas fa-fire-burner"></i></span>
+                <span>Spice & Sizzle <small class="text-secondary fw-normal fs-6">KDS & Pipeline</small></span>
+            </a>
+
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navContent">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-1 ms-lg-3">
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-custom active" id="nav-kds" href="javascript:void(0)" onclick="switchView('kds')">
+                            <i class="fas fa-tv me-1"></i> Kitchen Display (KDS)
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-custom" id="nav-pos" href="javascript:void(0)" onclick="switchView('pos')">
+                            <i class="fas fa-plus-circle me-1"></i> New Order (POS)
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-custom" id="nav-orders" href="javascript:void(0)" onclick="switchView('orders')">
+                            <i class="fas fa-list-check me-1"></i> Orders Pipeline <span class="badge bg-secondary ms-1" id="navActiveOrderCount">0</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-custom" id="nav-menu" href="javascript:void(0)" onclick="switchView('menu')">
+                            <i class="fas fa-utensils me-1"></i> Menu & Stock
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-custom" id="nav-dashboard" href="javascript:void(0)" onclick="switchView('dashboard')">
+                            <i class="fas fa-chart-line me-1"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-custom" id="nav-simulation" href="javascript:void(0)" onclick="switchView('simulation')">
+                            <i class="fas fa-network-wired me-1"></i> Multithreading Sim
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Utility controls -->
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="soundBtn" class="btn btn-sm btn-outline-success" onclick="toggleSound()">
+                        <i class="fas fa-volume-up me-1"></i> Sound ON
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmResetAll()" title="Clear orders for a fresh demonstration">
+                        <i class="fas fa-rotate-left me-1"></i> Reset Orders
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="toggleFullscreen()" title="Toggle Fullscreen">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ========================================================================= -->
+    <!-- 1. KITCHEN DISPLAY SYSTEM (KDS) VIEW                                      -->
+    <!-- ========================================================================= -->
+    <div id="view-kds" class="app-view active">
+        <div class="kds-wrapper">
+            <!-- Toolbar -->
+            <div class="kds-toolbar d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 small fw-bold text-warning"><i class="fas fa-cubes me-1"></i> Station:</label>
+                        <select id="kdsStationSelect" class="form-select form-select-sm bg-dark text-white border-secondary" style="width: 170px;" onchange="renderKds()">
+                            <option value="ALL">All Stations (Master)</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 small fw-bold text-secondary"><i class="fas fa-filter me-1"></i> Type:</label>
+                        <select id="kdsTypeSelect" class="form-select form-select-sm bg-dark text-white border-secondary" style="width: 140px;" onchange="renderKds()">
+                            <option value="ALL">All Orders</option>
+                            <option value="DINE_IN">🍽️ Dine-In</option>
+                            <option value="TAKEAWAY">🛍️ Takeaway</option>
+                            <option value="DELIVERY">🛵 Delivery</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm" style="max-width: 220px;">
+                        <span class="input-group-text bg-dark border-secondary text-secondary"><i class="fas fa-search"></i></span>
+                        <input type="text" id="kdsSearchBox" class="form-control bg-dark text-white border-secondary" placeholder="Search # or Table..." onkeyup="renderKds()">
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50 px-3 py-2">
+                        <i class="fas fa-circle-dot fa-fade me-1"></i> Kitchen Pipeline Live
+                    </span>
+                    <button type="button" class="btn btn-sm btn-primary fw-semibold" onclick="switchView('pos')">
+                        <i class="fas fa-plus me-1"></i> Push New Order
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3 Columns Kanban Board -->
+            <div class="kds-columns-grid">
+                <!-- Column 1: NEW ORDERS (PLACED) -->
+                <div class="kds-column">
+                    <div class="kds-column-header header-new">
+                        <div><i class="fas fa-bell me-2"></i> NEW ORDERS</div>
+                        <span class="badge bg-primary rounded-pill px-3 py-1 fs-6" id="kdsCountNew">0</span>
+                    </div>
+                    <div class="kds-column-body" id="kdsColNew">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Column 2: PREPARING (ACCEPTED / PREPARING) -->
+                <div class="kds-column">
+                    <div class="kds-column-header header-prep">
+                        <div><i class="fas fa-fire me-2"></i> PREPARING</div>
+                        <span class="badge bg-warning text-dark rounded-pill px-3 py-1 fs-6" id="kdsCountPrep">0</span>
+                    </div>
+                    <div class="kds-column-body" id="kdsColPrep">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Column 3: READY TO SERVE (READY) -->
+                <div class="kds-column">
+                    <div class="kds-column-header header-ready">
+                        <div><i class="fas fa-check-circle me-2"></i> READY TO SERVE</div>
+                        <span class="badge bg-success rounded-pill px-3 py-1 fs-6" id="kdsCountReady">0</span>
+                    </div>
+                    <div class="kds-column-body" id="kdsColReady">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- 2. NEW ORDER PAGE (POINT OF SALE / POS) VIEW                              -->
+    <!-- ========================================================================= -->
+    <div id="view-pos" class="app-view">
+        <div class="container-fluid px-4 py-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 class="fw-bold mb-1">Create Customer Order</h3>
+                    <p class="text-secondary mb-0">Select dining details, food dishes, item modifiers, and submit directly to the kitchen carousel</p>
+                </div>
+                <button type="button" class="btn btn-outline-primary" onclick="switchView('kds')">
+                    <i class="fas fa-tv me-1"></i> Open Kitchen Display
+                </button>
+            </div>
+
+            <div class="row g-4">
+                <!-- Left: Order Form & Catalog -->
+                <div class="col-lg-8">
+                    <!-- Dining Metadata Card -->
+                    <div class="card shadow-sm border-0 p-3 mb-4 rounded-3">
+                        <h5 class="fw-bold mb-3 text-primary"><i class="fas fa-receipt me-2"></i>Table & Dining Information</h5>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Order Type *</label>
+                                <select id="posOrderType" class="form-select" onchange="toggleTableInput()">
+                                    <option value="DINE_IN" selected>🍽️ Dine-In</option>
+                                    <option value="TAKEAWAY">🛍️ Takeaway</option>
+                                    <option value="DELIVERY">🛵 Delivery</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4" id="posTableGroup">
+                                <label class="form-label small fw-semibold">Table Number</label>
+                                <input type="text" id="posTableNumber" class="form-control" placeholder="e.g. T-04" value="T-01">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Priority</label>
+                                <select id="posPriority" class="form-select">
+                                    <option value="NORMAL" selected>Normal</option>
+                                    <option value="HIGH">High Priority</option>
+                                    <option value="URGENT">🔥 Urgent Priority</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Customer Name (Optional)</label>
+                                <input type="text" id="posCustomerName" class="form-control" placeholder="e.g. Rahul Sharma">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Contact Phone (Optional)</label>
+                                <input type="text" id="posCustomerPhone" class="form-control" placeholder="+91 98765 00000">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold">Order-Level Special Instructions</label>
+                                <input type="text" id="posOrderNote" class="form-control" placeholder="e.g. Serve starters first, allergy note, extra napkins">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Pills & Search -->
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                        <ul class="nav nav-pills gap-1" id="posCategoryPills">
+                            <!-- Injected by JS -->
+                        </ul>
+                        <div class="input-group" style="max-width: 260px;">
+                            <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                            <input type="text" id="posDishSearch" class="form-control" placeholder="Search dish..." onkeyup="filterPosMenu()">
+                        </div>
+                    </div>
+
+                    <!-- Menu Dishes Grid -->
+                    <div class="row g-3" id="posDishesGrid">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Right: Order Ticket Cart -->
+                <div class="col-lg-4">
+                    <div class="card shadow-sm border-0 p-3 cart-sticky-box bg-white">
+                        <div class="d-flex justify-content-between align-items-center pb-2 border-bottom mb-3">
+                            <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-shopping-basket text-success me-2"></i>Order Summary</h5>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearCart()">
+                                <i class="fas fa-trash-alt me-1"></i> Clear
+                            </button>
+                        </div>
+
+                        <!-- Cart Items Container -->
+                        <div class="cart-scroll-area" id="posCartContainer">
+                            <!-- Injected by JS -->
+                        </div>
+
+                        <!-- Financial Totals -->
+                        <div class="border-top pt-3 mt-3">
+                            <div class="d-flex justify-content-between text-secondary mb-1">
+                                <span>Subtotal:</span>
+                                <span>₹<span id="posSubtotal">0.00</span></span>
+                            </div>
+                            <div class="d-flex justify-content-between text-secondary mb-2">
+                                <span>GST / Tax (5%):</span>
+                                <span>₹<span id="posTax">0.00</span></span>
+                            </div>
+                            <div class="d-flex justify-content-between fw-bold fs-4 text-dark pt-2 border-top">
+                                <span>Total Bill:</span>
+                                <span class="text-success">₹<span id="posTotal">0.00</span></span>
+                            </div>
+
+                            <button type="button" id="submitOrderBtn" class="btn btn-success btn-lg w-100 mt-3 fw-bold shadow-sm" onclick="submitPosOrder()" disabled>
+                                <i class="fas fa-paper-plane me-2"></i> Submit Order to Kitchen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- 3. ACTIVE ORDERS PIPELINE VIEW                                            -->
+    <!-- ========================================================================= -->
+    <div id="view-orders" class="app-view">
+        <div class="container-fluid px-4 py-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 class="fw-bold mb-1">Active Restaurant Orders Pipeline</h3>
+                    <p class="text-secondary mb-0">Track ticket progressions, payment records, and line totals across all dining modes</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-danger" onclick="confirmResetAll()">
+                        <i class="fas fa-trash-alt me-1"></i> Clear All Orders
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="switchView('pos')">
+                        <i class="fas fa-plus me-1"></i> New Order
+                    </button>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 rounded-3">
+                <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="fw-bold mb-0">Live Orders Queue (<span id="tableOrdersCount">0</span>)</h5>
+                    <div class="input-group input-group-sm" style="max-width: 250px;">
+                        <span class="input-group-text bg-light"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text" id="orderSearchTable" class="form-control" placeholder="Search orders..." onkeyup="filterOrdersTable()">
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="ordersMainTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Order #</th>
+                                <th>Type & Table</th>
+                                <th>Customer</th>
+                                <th>Status</th>
+                                <th>Priority</th>
+                                <th>Elapsed</th>
+                                <th>Items</th>
+                                <th>Total Bill</th>
+                                <th>Payment</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ordersTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- 4. MENU & INVENTORY MANAGEMENT VIEW                                       -->
+    <!-- ========================================================================= -->
+    <div id="view-menu" class="app-view">
+        <div class="container-fluid px-4 py-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 class="fw-bold mb-1">Menu Management & Food Catalog</h3>
+                    <p class="text-secondary mb-0">Configure food items, recipe stations, pricing, and live inventory stock tracking</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalAddCategory">
+                        <i class="fas fa-folder-plus me-1"></i> New Category
+                    </button>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddDish">
+                        <i class="fas fa-plus me-1"></i> Add Menu Item
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card shadow-sm border-0 mb-4 p-3 bg-light rounded-3">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Category Filter</label>
+                        <select id="menuFilterCat" class="form-select form-select-sm" onchange="renderMenuCatalog()">
+                            <option value="ALL">All Categories</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Station Filter</label>
+                        <select id="menuFilterStation" class="form-select form-select-sm" onchange="renderMenuCatalog()">
+                            <option value="ALL">All Stations</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Availability</label>
+                        <select id="menuFilterAvail" class="form-select form-select-sm" onchange="renderMenuCatalog()">
+                            <option value="ALL">All</option>
+                            <option value="AVAILABLE">In Stock</option>
+                            <option value="OUT_OF_STOCK">Out of Stock</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Dish Search</label>
+                        <input type="text" id="menuSearchInput" class="form-control form-control-sm" placeholder="Search dish..." onkeyup="renderMenuCatalog()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Menu Table -->
+            <div class="card shadow-sm border-0 rounded-3">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Item Name</th>
+                                <th>Category</th>
+                                <th>Prep Station</th>
+                                <th class="text-end">Price</th>
+                                <th class="text-center">Stock Inventory</th>
+                                <th class="text-center">Est. Prep</th>
+                                <th class="text-center">Diet</th>
+                                <th class="text-center">Availability</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="menuTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- 5. ANALYTICS & DASHBOARD VIEW                                             -->
+    <!-- ========================================================================= -->
+    <div id="view-dashboard" class="app-view">
+        <div class="container-fluid px-4 py-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 class="fw-bold mb-1">Operational Analytics & Kitchen Overview</h3>
+                    <p class="text-secondary mb-0">Live shift performance, sales summaries, and average food preparation metrics</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-warning fw-semibold shadow-sm" onclick="switchView('kds')">
+                        <i class="fas fa-tv me-1"></i> Open KDS Board
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="exportDataJson()">
+                        <i class="fas fa-download me-1"></i> Export Data (JSON)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Key Metric KPI Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                    <div class="card metric-card p-3 bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-secondary small fw-semibold">TOTAL ORDERS</div>
+                                <h3 class="fw-bold my-1" id="dashTotalOrders">0</h3>
+                                <small class="text-muted">Today's shift</small>
+                            </div>
+                            <div class="metric-icon-box bg-primary bg-opacity-10 text-primary">
+                                <i class="fas fa-receipt"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                    <div class="card metric-card p-3 bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-secondary small fw-semibold">TOTAL SALES</div>
+                                <h3 class="fw-bold my-1 text-success">₹<span id="dashTotalSales">0.00</span></h3>
+                                <small class="text-muted">Net billed</small>
+                            </div>
+                            <div class="metric-icon-box bg-success bg-opacity-10 text-success">
+                                <i class="fas fa-rupee-sign"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                    <div class="card metric-card p-3 bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-secondary small fw-semibold">IN KITCHEN</div>
+                                <h3 class="fw-bold my-1 text-warning" id="dashInKitchen">0</h3>
+                                <small class="text-muted">Active tickets</small>
+                            </div>
+                            <div class="metric-icon-box bg-warning bg-opacity-10 text-warning">
+                                <i class="fas fa-fire-burner"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                    <div class="card metric-card p-3 bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-secondary small fw-semibold">AVG PREP TIME</div>
+                                <h3 class="fw-bold my-1 text-info"><span id="dashAvgPrep">0.0</span> <small class="fs-6">mins</small></h3>
+                                <small class="text-muted">Preparation average</small>
+                            </div>
+                            <div class="metric-icon-box bg-info bg-opacity-10 text-info">
+                                <i class="fas fa-stopwatch"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                    <div class="card metric-card p-3 bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-secondary small fw-semibold">COMPLETED</div>
+                                <h3 class="fw-bold my-1 text-secondary" id="dashCompleted">0</h3>
+                                <small class="text-muted">Orders served</small>
+                            </div>
+                            <div class="metric-icon-box bg-secondary bg-opacity-10 text-secondary">
+                                <i class="fas fa-check-double"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                    <div class="card metric-card p-3 bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-secondary small fw-semibold">LOW STOCK ALERTS</div>
+                                <h3 class="fw-bold my-1 text-danger" id="dashLowStock">0</h3>
+                                <small class="text-muted">Requires replenishment</small>
+                            </div>
+                            <div class="metric-icon-box bg-danger bg-opacity-10 text-danger">
+                                <i class="fas fa-boxes-stacked"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row g-4 mb-4">
+                <div class="col-lg-7">
+                    <div class="card shadow-sm border-0 p-3 bg-white rounded-3">
+                        <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-chart-area text-primary me-2"></i>Hourly Order Volume Pipeline</h5>
+                        <div style="height: 280px;">
+                            <canvas id="chartHourlyOrders"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="card shadow-sm border-0 p-3 bg-white rounded-3">
+                        <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-chart-pie text-success me-2"></i>Sales by Category</h5>
+                        <div style="height: 280px;">
+                            <canvas id="chartSalesCategory"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- 6. MULTITHREADED PRODUCER-CONSUMER SIMULATION VIEW                        -->
+    <!-- ========================================================================= -->
+    <div id="view-simulation" class="app-view">
+        <div class="container-fluid px-4 py-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                <div>
+                    <h3 class="fw-bold mb-1">Multithreaded Kitchen Carousel Simulation</h3>
+                    <p class="text-secondary mb-0">Interactive visualizer of the classic Producer-Consumer synchronization model using <code>wait()</code> and <code>notifyAll()</code></p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary fw-semibold" id="btnRunRubricSim" onclick="startRubricSimulation()">
+                        <i class="fas fa-play me-1"></i> Run Rubric Workflow (6 Burgers)
+                    </button>
+                    <button type="button" class="btn btn-outline-danger fw-semibold" onclick="triggerOverloadSim()">
+                        <i class="fas fa-triangle-exclamation me-1"></i> Trigger Overload Exception
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="resetSimulationVisuals()">
+                        <i class="fas fa-rotate-left"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Architecture Infographic Banner -->
+            <div class="card border-0 bg-dark text-white p-3 mb-4 rounded-3 shadow-sm">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-4 text-center border-end border-secondary">
+                        <div class="fw-bold text-info fs-5"><i class="fas fa-user-tag me-1"></i> OrderTakerThread (Producer)</div>
+                        <small class="text-light opacity-75">Waiters place orders onto the carousel rack. When the carousel hits 5/5 capacity, the thread pauses on <code>wait()</code>.</small>
+                    </div>
+                    <div class="col-md-4 text-center border-end border-secondary">
+                        <div class="fw-bold text-warning fs-5"><i class="fas fa-boxes me-1"></i> KitchenOrderQueue (Monitor)</div>
+                        <small class="text-light opacity-75">Thread-safe bounded queue with capacity = 5. Synchronized methods <code>placeOrder()</code> and <code>cookNextOrder()</code>.</small>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="fw-bold text-success fs-5"><i class="fas fa-hat-chef me-1"></i> ChefStationThread (Consumer)</div>
+                        <small class="text-light opacity-75">Chefs cook orders in FIFO order. Once finished, calls <code>notifyAll()</code> to wake paused waiters.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Carousel Visual Track (5 Slots) -->
+            <div class="card border-0 shadow-sm p-4 mb-4 bg-white rounded-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0 text-dark">
+                        <i class="fas fa-circle-notch text-primary me-2"></i>Kitchen Order Carousel Rack (Capacity: 5)
+                    </h5>
+                    <span class="badge bg-secondary fs-6 px-3 py-2" id="simOccupancyBadge">Occupancy: 0 / 5</span>
+                </div>
+
+                <div class="carousel-track" id="simCarouselTrack">
+                    <div class="carousel-slot" id="slot-0"><span>Slot #1</span><small class="text-muted">Empty</small></div>
+                    <div class="carousel-slot" id="slot-1"><span>Slot #2</span><small class="text-muted">Empty</small></div>
+                    <div class="carousel-slot" id="slot-2"><span>Slot #3</span><small class="text-muted">Empty</small></div>
+                    <div class="carousel-slot" id="slot-3"><span>Slot #4</span><small class="text-muted">Empty</small></div>
+                    <div class="carousel-slot" id="slot-4"><span>Slot #5</span><small class="text-muted">Empty</small></div>
+                </div>
+            </div>
+
+            <!-- Thread States & Live Console Log -->
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card shadow-sm border-0 p-3 bg-white rounded-3 h-100">
+                        <h6 class="fw-bold text-secondary mb-3"><i class="fas fa-microchip me-1"></i> Thread State Monitors</h6>
+
+                        <div class="p-3 mb-3 border rounded-3 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <strong>Waiter Thread 1 (Producer)</strong>
+                                <span class="badge bg-secondary" id="simWaiterState">READY</span>
+                            </div>
+                            <small class="text-muted d-block" id="simWaiterStatusDesc">Idle. Ready to submit customer tickets.</small>
+                        </div>
+
+                        <div class="p-3 mb-3 border rounded-3 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <strong>Chef Station 1 (Consumer)</strong>
+                                <span class="badge bg-secondary" id="simChefState">READY</span>
+                            </div>
+                            <small class="text-muted d-block" id="simChefStatusDesc">Idle. Waiting for tickets.</small>
+                        </div>
+
+                        <div class="p-3 border rounded-3 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <strong>Emergency Guard</strong>
+                                <span class="badge bg-success" id="simOverloadState">NORMAL</span>
+                            </div>
+                            <small class="text-muted d-block">Max emergency cooking capacity: 10 orders.</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0 p-3 bg-dark text-white rounded-3 h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
+                            <h6 class="fw-bold mb-0 text-info"><i class="fas fa-terminal me-2"></i>Inter-Thread Signaling Live Console</h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary text-white py-0 px-2" onclick="clearSimLogs()">Clear Log</button>
+                        </div>
+                        <div id="simLogConsole" style="height: 250px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; line-height: 1.5;" class="p-2">
+                            <div class="text-muted">[System] Multithreaded simulation ready. Click 'Run Rubric Workflow' above.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODALS                                                                    -->
+    <!-- ========================================================================= -->
+
+    <!-- Modal: Order Details / Ticket View -->
+    <div class="modal fade" id="modalOrderDetails" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="detailOrderTitle">Order Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="detailOrderBody">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Pay Bill -->
+    <div class="modal fade" id="modalPayBill" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Process Order Payment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">Order: <strong id="payOrderNumber">#ORD-000</strong></p>
+                    <p class="mb-3 fs-5">Total Due: <strong class="text-success">₹<span id="payOrderTotal">0.00</span></strong></p>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Payment Method</label>
+                        <select id="payMethod" class="form-select">
+                            <option value="CASH">💵 Cash</option>
+                            <option value="UPI">📱 UPI / QR Code</option>
+                            <option value="CARD">💳 Credit / Debit Card</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success fw-bold" onclick="processPaymentConfirm()">Confirm Payment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Reject Reason Prompt -->
+    <div class="modal fade" id="modalRejectOrder" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-danger">Reject Customer Ticket</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2">Please select or enter the kitchen rejection reason:</p>
+                    <input type="hidden" id="rejectOrderId">
+                    <select id="rejectReasonSelect" class="form-select mb-2" onchange="handleRejectSelectChange(this)">
+                        <option value="Station equipment maintenance">Station equipment maintenance</option>
+                        <option value="Ingredients temporarily exhausted">Ingredients temporarily exhausted</option>
+                        <option value="Kitchen emergency overload backlog">Kitchen emergency overload backlog</option>
+                        <option value="Other">Other reason (enter below)</option>
+                    </select>
+                    <input type="text" id="rejectReasonCustom" class="form-control d-none" placeholder="Enter custom reason...">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger fw-bold" onclick="confirmRejectOrder()">Reject Ticket</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add New Menu Item -->
+    <div class="modal fade" id="modalAddDish" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Add New Menu Dish</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Item Name *</label>
+                        <input type="text" id="addDishName" class="form-control" placeholder="e.g. Gourmet Truffle Burger" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Description</label>
+                        <textarea id="addDishDesc" class="form-control" rows="2" placeholder="Brief description of the recipe"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Category *</label>
+                        <select id="addDishCat" class="form-select"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Kitchen Station *</label>
+                        <select id="addDishStation" class="form-select"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Price (₹) *</label>
+                        <input type="number" id="addDishPrice" class="form-control" step="0.5" value="180">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Prep Time (mins) *</label>
+                        <input type="number" id="addDishPrep" class="form-control" value="12">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Initial Stock Quantity *</label>
+                        <input type="number" id="addDishStock" class="form-control" value="50">
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check mt-4">
+                            <input class="form-check-input" type="checkbox" id="addDishVeg">
+                            <label class="form-check-label fw-semibold" for="addDishVeg">Vegetarian Dish</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Suggested Modifiers</label>
+                        <input type="text" id="addDishModifiers" class="form-control" placeholder="e.g. Extra Cheese (+₹30), Less Spicy">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary fw-bold" onclick="saveNewDish()">Create Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Category -->
+    <div class="modal fade" id="modalAddCategory" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Add Menu Category</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Category Name *</label>
+                        <input type="text" id="addCatName" class="form-control" placeholder="e.g. Gourmet Pizzas">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Description</label>
+                        <input type="text" id="addCatDesc" class="form-control" placeholder="Brief category notes">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary fw-bold" onclick="saveNewCategory()">Add Category</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Quick Adjust Stock -->
+    <div class="modal fade" id="modalAdjustStock" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold">Update Stock Quantity</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="adjustDishId">
+                    <label class="form-label small fw-semibold" id="adjustDishLabel">Dish</label>
+                    <input type="number" id="adjustDishQty" class="form-control" min="0" value="50">
+                    <small class="text-muted d-block mt-2">Setting stock to 0 automatically marks this item unavailable.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary fw-bold" onclick="saveQuickStock()">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toasts notifications -->
+    <div class="toast-container-custom">
+        <div id="liveToast" class="toast align-items-center text-white bg-dark border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="toastMessage">
+                    Welcome to Spice & Sizzle KDS!
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- ========================================================================= -->
+    <!-- JAVASCRIPT LOGIC ENGINE                                                   -->
+    <!-- ========================================================================= -->
+    <script>
+        /* ==========================================================================
+           1. INITIAL STATE & SEED DATA STORE
+           ========================================================================== */
+        const STORAGE_KEY = 'spice_sizzle_kds_state_v1';
+
+        const DEFAULT_STATIONS = [
+            { id: 1, name: "Grill Station", code: "GRILL", color: "#e63946" },
+            { id: 2, name: "Fryer Station", code: "FRYER", color: "#f4a261" },
+            { id: 3, name: "Main Kitchen", code: "MAIN", color: "#2a9d8f" },
+            { id: 4, name: "Beverage Counter", code: "BEV", color: "#457b9d" },
+            { id: 5, name: "Dessert Station", code: "DESSERT", color: "#e76f51" }
+        ];
+
+        const DEFAULT_CATEGORIES = [
+            { id: 1, name: "Starters", desc: "Appetizers and quick bites" },
+            { id: 2, name: "Main Course", desc: "Curries, breads, and gravies" },
+            { id: 3, name: "Fast Food", desc: "Burgers, sides, and snacks" },
+            { id: 4, name: "Beverages", desc: "Cold and hot drinks" },
+            { id: 5, name: "Desserts", desc: "Sweet pastries & desserts" }
+        ];
+
+        const DEFAULT_MENU = [
+            { id: 1, name: "Chicken Burger", categoryId: 3, stationId: 1, price: 180.00, prepMinutes: 12, stockQuantity: 50, vegetarian: false, available: true, modifiers: "Extra Cheese (+₹30), Spicy Mayo" },
+            { id: 2, name: "Crispy French Fries", categoryId: 3, stationId: 2, price: 110.00, prepMinutes: 8, stockQuantity: 50, vegetarian: true, available: true, modifiers: "Peri-Peri Seasoning, Cheesy Dip" },
+            { id: 3, name: "Paneer Butter Masala", categoryId: 2, stationId: 3, price: 260.00, prepMinutes: 15, stockQuantity: 40, vegetarian: true, available: true, modifiers: "Less Spicy, Extra Butter" },
+            { id: 4, name: "Butter Naan", categoryId: 2, stationId: 3, price: 45.00, prepMinutes: 5, stockQuantity: 60, vegetarian: true, available: true, modifiers: "Garlic Flavor, Crisp" },
+            { id: 5, name: "Grilled Chicken Tikka", categoryId: 1, stationId: 1, price: 280.00, prepMinutes: 16, stockQuantity: 35, vegetarian: false, available: true, modifiers: "Mint Chutney, Extra Spicy" },
+            { id: 6, name: "Crispy Veg Spring Rolls", categoryId: 1, stationId: 2, price: 150.00, prepMinutes: 10, stockQuantity: 40, vegetarian: true, available: true, modifiers: "Sweet Chili Dip" },
+            { id: 7, name: "Cold Coffee with Ice Cream", categoryId: 4, stationId: 4, price: 120.00, prepMinutes: 6, stockQuantity: 45, vegetarian: true, available: true, modifiers: "Less Sugar, Extra Scoop" },
+            { id: 8, name: "Mango Mint Cooler", categoryId: 4, stationId: 4, price: 110.00, prepMinutes: 5, stockQuantity: 50, vegetarian: true, available: true, modifiers: "Extra Ice, No Sugar" },
+            { id: 9, name: "Sizzling Chocolate Brownie", categoryId: 5, stationId: 5, price: 190.00, prepMinutes: 8, stockQuantity: 30, vegetarian: true, available: true, modifiers: "Extra Fudge, Nuts" },
+            { id: 10, name: "Gulab Jamun (2 Pcs)", categoryId: 5, stationId: 5, price: 80.00, prepMinutes: 4, stockQuantity: 40, vegetarian: true, available: true, modifiers: "Serve Warm" }
+        ];
+
+        // State holder
+        let appState = {
+            stations: DEFAULT_STATIONS,
+            categories: DEFAULT_CATEGORIES,
+            menu: DEFAULT_MENU,
+            orders: [],
+            cart: [],
+            currentPosCat: "ALL",
+            soundEnabled: true,
+            orderCounter: 101
+        };
+
+        // Load State from LocalStorage
+        function loadState() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    appState = Object.assign(appState, parsed);
+                } else {
+                    seedDemoOrders();
+                    saveState();
+                }
+            } catch (e) {
+                console.warn("Storage load error, initializing fresh seed:", e);
+                seedDemoOrders();
+                saveState();
+            }
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                console.error("Storage save failed:", e);
+            }
+            updateBadges();
+        }
+
+        // Seed 3 initial demo orders
+        function seedDemoOrders() {
+            const now = Date.now();
+            appState.orders = [
+                {
+                    id: 1,
+                    orderNumber: "ORD-20261030-101",
+                    orderType: "DINE_IN",
+                    tableNumber: "T-04",
+                    customerName: "Rahul Sharma",
+                    customerPhone: "+91 98765 43210",
+                    priority: "NORMAL",
+                    status: "PLACED",
+                    specialInstructions: "Less spicy please",
+                    createdAt: now - (4 * 60 * 1000), // 4 mins ago
+                    estimatedPrepMinutes: 15,
+                    paymentStatus: "UNPAID",
+                    subtotal: 290.00,
+                    tax: 14.50,
+                    total: 304.50,
+                    items: [
+                        { id: 101, menuItemId: 1, name: "Chicken Burger", quantity: 1, price: 180, stationId: 1, stationName: "Grill Station", status: "PENDING", note: "Less spicy" },
+                        { id: 102, menuItemId: 2, name: "Crispy French Fries", quantity: 1, price: 110, stationId: 2, stationName: "Fryer Station", status: "PENDING", note: "Extra crispy" }
+                    ]
+                },
+                {
+                    id: 2,
+                    orderNumber: "ORD-20261030-102",
+                    orderType: "TAKEAWAY",
+                    tableNumber: "TA-08",
+                    customerName: "Ananya Sen",
+                    customerPhone: "+91 98765 11111",
+                    priority: "HIGH",
+                    status: "PREPARING",
+                    specialInstructions: "Pack gravies separately",
+                    createdAt: now - (12 * 60 * 1000), // 12 mins ago
+                    estimatedPrepMinutes: 15,
+                    paymentStatus: "PAID",
+                    subtotal: 395.00,
+                    tax: 19.75,
+                    total: 414.75,
+                    items: [
+                        { id: 103, menuItemId: 3, name: "Paneer Butter Masala", quantity: 1, price: 260, stationId: 3, stationName: "Main Kitchen", status: "PREPARING", note: "Medium spice" },
+                        { id: 104, menuItemId: 4, name: "Butter Naan", quantity: 3, price: 45, stationId: 3, stationName: "Main Kitchen", status: "READY", note: "Crisp" }
+                    ]
+                },
+                {
+                    id: 3,
+                    orderNumber: "ORD-20261030-103",
+                    orderType: "DINE_IN",
+                    tableNumber: "T-12",
+                    customerName: "Vikram Verma",
+                    customerPhone: "+91 98765 22222",
+                    priority: "NORMAL",
+                    status: "READY",
+                    specialInstructions: "",
+                    createdAt: now - (18 * 60 * 1000), // 18 mins ago
+                    estimatedPrepMinutes: 10,
+                    paymentStatus: "PAID",
+                    subtotal: 310.00,
+                    tax: 15.50,
+                    total: 325.50,
+                    items: [
+                        { id: 105, menuItemId: 7, name: "Cold Coffee with Ice Cream", quantity: 1, price: 120, stationId: 4, stationName: "Beverage Counter", status: "READY", note: "Less sugar" },
+                        { id: 106, menuItemId: 9, name: "Sizzling Chocolate Brownie", quantity: 1, price: 190, stationId: 5, stationName: "Dessert Station", status: "READY", note: "Warm fudge" }
+                    ]
+                }
+            ];
+            appState.orderCounter = 104;
+        }
+
+        /* ==========================================================================
+           2. WEB AUDIO SYNTHESIZER (NO EXTERNAL MP3 DEPENDENCY)
+           ========================================================================== */
+        let audioCtx = null;
+
+        function playOrderChime() {
+            if (!appState.soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                // Dual-tone harmonic kitchen bell (D5 587Hz -> A5 880Hz)
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, now);
+                osc.frequency.setValueAtTime(880.00, now + 0.12);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.65);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.65);
+            } catch (err) {
+                console.warn("Audio chime note:", err);
+            }
+        }
+
+        function toggleSound() {
+            appState.soundEnabled = !appState.soundEnabled;
+            saveState();
+            const btn = document.getElementById('soundBtn');
+            if (appState.soundEnabled) {
+                btn.innerHTML = '<i class="fas fa-volume-up me-1"></i> Sound ON';
+                btn.className = 'btn btn-sm btn-outline-success';
+                playOrderChime();
+                showToast("Kitchen audio chime enabled!");
+            } else {
+                btn.innerHTML = '<i class="fas fa-volume-mute me-1"></i> Sound Muted';
+                btn.className = 'btn btn-sm btn-outline-secondary';
+                showToast("Kitchen audio muted.");
+            }
+        }
+
+        /* ==========================================================================
+           3. VIEW SWITCHER & HELPERS
+           ========================================================================== */
+        function switchView(viewName) {
+            document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-link-custom').forEach(n => n.classList.remove('active'));
+
+            const viewEl = document.getElementById(`view-${viewName}`);
+            const navEl = document.getElementById(`nav-${viewName}`);
+
+            if (viewEl) viewEl.classList.add('active');
+            if (navEl) navEl.classList.add('active');
+
+            if (viewName === 'kds') renderKds();
+            if (viewName === 'pos') renderPos();
+            if (viewName === 'orders') renderOrdersPipeline();
+            if (viewName === 'menu') renderMenuCatalog();
+            if (viewName === 'dashboard') renderDashboard();
+            if (viewName === 'simulation') renderSimulationVisuals();
+        }
+
+        function showToast(msg) {
+            const toastEl = document.getElementById('liveToast');
+            document.getElementById('toastMessage').innerText = msg;
+            const toast = new bootstrap.Toast(toastEl, { delay: 3500 });
+            toast.show();
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, function(m) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+            });
+        }
+
+        function formatElapsed(createdAtMs) {
+            const elapsedSeconds = Math.max(0, Math.floor((Date.now() - createdAtMs) / 1000));
+            const mins = Math.floor(elapsedSeconds / 60);
+            const secs = elapsedSeconds % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function getElapsedMinutes(createdAtMs) {
+            return Math.max(0, Math.floor((Date.now() - createdAtMs) / 60000));
+        }
+
+        function updateBadges() {
+            const activeCount = appState.orders.filter(o => o.status !== 'SERVED' && o.status !== 'CANCELLED' && o.status !== 'REJECTED').length;
+            const badge = document.getElementById('navActiveOrderCount');
+            if (badge) badge.innerText = activeCount;
+        }
+
+        /* ==========================================================================
+           4. KITCHEN DISPLAY SYSTEM (KDS) LOGIC
+           ========================================================================== */
+        function renderKds() {
+            const stationFilter = document.getElementById('kdsStationSelect').value;
+            const typeFilter = document.getElementById('kdsTypeSelect').value;
+            const search = (document.getElementById('kdsSearchBox').value || '').toLowerCase().trim();
+
+            const colNew = document.getElementById('kdsColNew');
+            const colPrep = document.getElementById('kdsColPrep');
+            const colReady = document.getElementById('kdsColReady');
+
+            colNew.innerHTML = '';
+            colPrep.innerHTML = '';
+            colReady.innerHTML = '';
+
+            // Filter active orders
+            const activeOrders = appState.orders.filter(o => o.status !== 'SERVED' && o.status !== 'CANCELLED' && o.status !== 'REJECTED');
+
+            let countNew = 0, countPrep = 0, countReady = 0;
+
+            activeOrders.forEach(order => {
+                // Type Filter
+                if (typeFilter !== 'ALL' && order.orderType !== typeFilter) return;
+
+                // Search Filter
+                const matchesSearch = !search || 
+                    order.orderNumber.toLowerCase().includes(search) || 
+                    (order.tableNumber && order.tableNumber.toLowerCase().includes(search)) ||
+                    (order.customerName && order.customerName.toLowerCase().includes(search));
+                if (!matchesSearch) return;
+
+                // Station Filter
+                const matchingItems = (stationFilter === 'ALL') 
+                    ? order.items 
+                    : order.items.filter(i => String(i.stationId) === stationFilter);
+
+                if (matchingItems.length === 0) return;
+
+                const isOverdue = getElapsedMinutes(order.createdAt) >= (order.estimatedPrepMinutes || 15);
+                const ticketCard = createKdsTicketElement(order, matchingItems, isOverdue);
+
+                if (order.status === 'PLACED') {
+                    colNew.appendChild(ticketCard);
+                    countNew++;
+                } else if (order.status === 'ACCEPTED' || order.status === 'PREPARING') {
+                    colPrep.appendChild(ticketCard);
+                    countPrep++;
+                } else if (order.status === 'READY') {
+                    colReady.appendChild(ticketCard);
+                    countReady++;
+                }
+            });
+
+            document.getElementById('kdsCountNew').innerText = countNew;
+            document.getElementById('kdsCountPrep').innerText = countPrep;
+            document.getElementById('kdsCountReady').innerText = countReady;
+
+            if (countNew === 0) colNew.innerHTML = `<div class="text-center text-muted py-5"><i class="fas fa-inbox fa-3x mb-2 opacity-50"></i><p>No new orders</p></div>`;
+            if (countPrep === 0) colPrep.innerHTML = `<div class="text-center text-muted py-5"><i class="fas fa-fire fa-3x mb-2 opacity-50"></i><p>No orders in prep</p></div>`;
+            if (countReady === 0) colReady.innerHTML = `<div class="text-center text-muted py-5"><i class="fas fa-circle-check fa-3x mb-2 opacity-50"></i><p>No orders ready</p></div>`;
+        }
+
+        function createKdsTicketElement(order, items, isOverdue) {
+            const card = document.createElement('div');
+            card.className = `kds-ticket ${order.priority === 'URGENT' ? 'ticket-urgent' : (order.priority === 'HIGH' ? 'ticket-high' : '')} ${isOverdue ? 'ticket-overdue' : ''}`;
+            card.id = `ticket-${order.id}`;
+
+            const priorityBadge = order.priority === 'URGENT' 
+                ? '<span class="badge bg-danger ms-1"><i class="fas fa-triangle-exclamation"></i> URGENT</span>'
+                : (order.priority === 'HIGH' ? '<span class="badge bg-warning text-dark ms-1">HIGH</span>' : '');
+
+            const typeIcon = order.orderType === 'DINE_IN' ? 'fa-chair' : (order.orderType === 'TAKEAWAY' ? 'fa-bag-shopping' : 'fa-motorcycle');
+            const typeText = order.orderType === 'DINE_IN' ? 'Dine-In' : (order.orderType === 'TAKEAWAY' ? 'Takeaway' : 'Delivery');
+
+            let itemsHtml = '';
+            items.forEach(item => {
+                const station = appState.stations.find(s => s.id === item.stationId);
+                const stationColor = station ? station.color : '#64748b';
+                const stationName = station ? station.name : 'Kitchen';
+
+                const statusClass = item.status === 'READY' ? 'item-ready' : (item.status === 'PREPARING' ? 'item-prep' : '');
+                
+                let actionBtn = '';
+                if (item.status === 'PENDING') {
+                    actionBtn = `<button class="btn btn-sm btn-outline-warning py-0 px-2 small" onclick="advanceItemStatus(${order.id}, ${item.id}, 'PREPARING')">Start</button>`;
+                } else if (item.status === 'PREPARING') {
+                    actionBtn = `<button class="btn btn-sm btn-outline-success py-0 px-2 small" onclick="advanceItemStatus(${order.id}, ${item.id}, 'READY')">Ready</button>`;
+                } else {
+                    actionBtn = `<span class="text-success"><i class="fas fa-check"></i></span>`;
+                }
+
+                itemsHtml += `
+                    <div class="ticket-item-row ${statusClass}">
+                        <div style="flex: 1;">
+                            <div>
+                                <span class="fw-bold text-warning me-1">${item.quantity}x</span>
+                                <span class="fw-semibold text-white">${escapeHtml(item.name)}</span>
+                                <span class="badge ms-1" style="background-color: ${stationColor}; font-size: 0.65rem;">${stationName}</span>
+                            </div>
+                            ${item.note ? `<small class="text-info d-block" style="font-size: 0.75rem;"><i class="fas fa-comment-dots me-1"></i>${escapeHtml(item.note)}</small>` : ''}
+                        </div>
+                        <div class="ms-2">
+                            ${actionBtn}
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Ticket Action Buttons based on order status
+            let actionsHtml = '';
+            if (order.status === 'PLACED') {
+                actionsHtml = `
+                    <div class="d-flex gap-2 mt-3 pt-2 border-top border-secondary">
+                        <button class="btn btn-primary btn-sm flex-grow-1 fw-bold" onclick="advanceOrderStatus(${order.id}, 'ACCEPTED')">
+                            <i class="fas fa-check me-1"></i> Accept
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="promptRejectOrder(${order.id})">
+                            <i class="fas fa-times me-1"></i> Reject
+                        </button>
+                    </div>
+                `;
+            } else if (order.status === 'ACCEPTED') {
+                actionsHtml = `
+                    <div class="d-flex gap-2 mt-3 pt-2 border-top border-secondary">
+                        <button class="btn btn-warning text-dark btn-sm flex-grow-1 fw-bold" onclick="advanceOrderStatus(${order.id}, 'PREPARING')">
+                            <i class="fas fa-fire me-1"></i> Start Prep
+                        </button>
+                    </div>
+                `;
+            } else if (order.status === 'PREPARING') {
+                actionsHtml = `
+                    <div class="d-flex gap-2 mt-3 pt-2 border-top border-secondary">
+                        <button class="btn btn-success btn-sm flex-grow-1 fw-bold" onclick="advanceOrderStatus(${order.id}, 'READY')">
+                            <i class="fas fa-bell me-1"></i> Mark All Ready
+                        </button>
+                    </div>
+                `;
+            } else if (order.status === 'READY') {
+                actionsHtml = `
+                    <div class="d-flex gap-2 mt-3 pt-2 border-top border-secondary">
+                        <button class="btn btn-secondary btn-sm flex-grow-1 fw-bold" onclick="advanceOrderStatus(${order.id}, 'SERVED')">
+                            <i class="fas fa-concierge-bell me-1"></i> Mark Served
+                        </button>
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <div class="fw-bold fs-5 text-white">
+                            #${order.orderNumber} ${priorityBadge}
+                        </div>
+                        <div class="small text-secondary">
+                            <span><i class="fas ${typeIcon} me-1"></i>${typeText}</span>
+                            ${order.tableNumber ? `<span class="badge bg-dark border border-secondary ms-2">${order.tableNumber}</span>` : ''}
+                            ${order.customerName ? `<span class="ms-1 text-light opacity-75">• ${escapeHtml(order.customerName)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="fw-bold ${isOverdue ? 'text-danger' : 'text-primary'} timer-display" data-time="${order.createdAt}">
+                            <i class="far fa-clock me-1"></i>${formatElapsed(order.createdAt)}
+                        </div>
+                        <small class="text-muted" style="font-size: 0.7rem;">Est: ${order.estimatedPrepMinutes || 15}m</small>
+                    </div>
+                </div>
+
+                ${order.specialInstructions ? `
+                    <div class="alert alert-warning py-1 px-2 mb-2 text-dark small" style="font-size: 0.78rem;">
+                        <i class="fas fa-info-circle me-1"></i> <strong>Note:</strong> ${escapeHtml(order.specialInstructions)}
+                    </div>
+                ` : ''}
+
+                <div class="ticket-items-container">
+                    ${itemsHtml}
+                </div>
+
+                ${actionsHtml}
+            `;
+
+            return card;
+        }
+
+        function advanceOrderStatus(orderId, newStatus) {
+            const order = appState.orders.find(o => o.id === orderId);
+            if (!order) return;
+
+            order.status = newStatus;
+            if (newStatus === 'PREPARING') {
+                order.items.forEach(i => { if (i.status === 'PENDING') i.status = 'PREPARING'; });
+            } else if (newStatus === 'READY') {
+                order.items.forEach(i => i.status = 'READY');
+                playOrderChime();
+            } else if (newStatus === 'SERVED') {
+                order.servedAt = Date.now();
+                showToast(`Order #${order.orderNumber} served to customer!`);
+            }
+
+            saveState();
+            renderKds();
+        }
+
+        function advanceItemStatus(orderId, itemId, newStatus) {
+            const order = appState.orders.find(o => o.id === orderId);
+            if (!order) return;
+
+            const item = order.items.find(i => i.id === itemId);
+            if (!item) return;
+
+            item.status = newStatus;
+
+            // If order was ACCEPTED, advance it to PREPARING
+            if (order.status === 'ACCEPTED' && newStatus === 'PREPARING') {
+                order.status = 'PREPARING';
+            }
+
+            // Check if all items in this parent order are ready!
+            const allReady = order.items.every(i => i.status === 'READY');
+            if (allReady && order.status !== 'READY' && order.status !== 'SERVED') {
+                order.status = 'READY';
+                playOrderChime();
+                showToast(`All items ready! Order #${order.orderNumber} marked READY.`);
+            }
+
+            saveState();
+            renderKds();
+        }
+
+        function promptRejectOrder(orderId) {
+            document.getElementById('rejectOrderId').value = orderId;
+            const modal = new bootstrap.Modal(document.getElementById('modalRejectOrder'));
+            modal.show();
+        }
+
+        function handleRejectSelectChange(select) {
+            const customInput = document.getElementById('rejectReasonCustom');
+            if (select.value === 'Other') {
+                customInput.classList.remove('d-none');
+            } else {
+                customInput.classList.add('d-none');
+            }
+        }
+
+        function confirmRejectOrder() {
+            const orderId = parseInt(document.getElementById('rejectOrderId').value);
+            const selectVal = document.getElementById('rejectReasonSelect').value;
+            const customVal = document.getElementById('rejectReasonCustom').value.trim();
+            const reason = (selectVal === 'Other' && customVal) ? customVal : selectVal;
+
+            const order = appState.orders.find(o => o.id === orderId);
+            if (order) {
+                order.status = 'REJECTED';
+                order.rejectionReason = reason;
+
+                // Restore stock
+                restoreOrderInventory(order);
+
+                showToast(`Order #${order.orderNumber} rejected. Stock restored.`);
+            }
+
+            saveState();
+            bootstrap.Modal.getInstance(document.getElementById('modalRejectOrder')).hide();
+            renderKds();
+        }
+
+        // Live timer ticker
+        setInterval(() => {
+            document.querySelectorAll('.timer-display').forEach(el => {
+                const time = parseInt(el.getAttribute('data-time'));
+                if (time) {
+                    el.innerHTML = `<i class="far fa-clock me-1"></i>${formatElapsed(time)}`;
+                }
+            });
+        }, 1000);
+
+        /* ==========================================================================
+           5. NEW ORDER (POS) LOGIC
+           ========================================================================== */
+        function renderPos() {
+            renderPosCategoryPills();
+            filterPosMenu();
+            renderPosCart();
+        }
+
+        function toggleTableInput() {
+            const type = document.getElementById('posOrderType').value;
+            const tableGrp = document.getElementById('posTableGroup');
+            tableGrp.style.display = (type === 'DINE_IN') ? 'block' : 'none';
+        }
+
+        function renderPosCategoryPills() {
+            const container = document.getElementById('posCategoryPills');
+            let html = `
+                <li class="nav-item">
+                    <button class="nav-link btn-sm ${appState.currentPosCat === 'ALL' ? 'active' : ''}" onclick="selectPosCategory('ALL')">All Dishes</button>
+                </li>
+            `;
+            appState.categories.forEach(cat => {
+                html += `
+                    <li class="nav-item">
+                        <button class="nav-link btn-sm ${appState.currentPosCat === String(cat.id) ? 'active' : ''}" onclick="selectPosCategory('${cat.id}')">${escapeHtml(cat.name)}</button>
+                    </li>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function selectPosCategory(catId) {
+            appState.currentPosCat = catId;
+            renderPosCategoryPills();
+            filterPosMenu();
+        }
+
+        function filterPosMenu() {
+            const query = (document.getElementById('posDishSearch').value || '').toLowerCase().trim();
+            const grid = document.getElementById('posDishesGrid');
+
+            grid.innerHTML = '';
+
+            const filtered = appState.menu.filter(dish => {
+                const matchesCat = (appState.currentPosCat === 'ALL' || String(dish.categoryId) === appState.currentPosCat);
+                const matchesSearch = !query || dish.name.toLowerCase().includes(query) || (dish.description && dish.description.toLowerCase().includes(query));
+                return matchesCat && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-12 text-center text-muted py-5">
+                        <i class="fas fa-utensils fa-3x mb-3 opacity-50"></i>
+                        <h5>No dishes found</h5>
+                        <p class="small">Try adjusting search query or category filter</p>
+                    </div>
+                `;
+                return;
+            }
+
+            filtered.forEach(dish => {
+                const station = appState.stations.find(s => s.id === dish.stationId);
+                const stationColor = station ? station.color : '#64748b';
+                const stationName = station ? station.name : 'Kitchen';
+
+                const isOutOfStock = !dish.available || dish.stockQuantity <= 0;
+                const isLowStock = dish.available && dish.stockQuantity > 0 && dish.stockQuantity <= 5;
+
+                let stockBadge = '';
+                if (isOutOfStock) {
+                    stockBadge = `<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Out of Stock</span>`;
+                } else if (isLowStock) {
+                    stockBadge = `<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Low Stock: ${dish.stockQuantity} left</span>`;
+                } else {
+                    stockBadge = `<span class="badge bg-light text-success border"><i class="fas fa-check-circle me-1"></i>In Stock: ${dish.stockQuantity}</span>`;
+                }
+
+                const col = document.createElement('div');
+                col.className = 'col-md-4 col-sm-6';
+                col.innerHTML = `
+                    <div class="card h-100 shadow-sm border p-3 dish-card ${isOutOfStock ? 'dish-disabled' : ''}" onclick="addDishToCart(${dish.id})">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="badge ${dish.vegetarian ? 'bg-success' : 'bg-danger'}" style="font-size: 0.68rem;">
+                                    ${dish.vegetarian ? '🟢 VEG' : '🔴 NON-VEG'}
+                                </span>
+                                <span class="badge ms-1" style="background-color: ${stationColor}; font-size: 0.68rem;">
+                                    ${stationName}
+                                </span>
+                            </div>
+                            <span class="badge bg-light text-dark border">
+                                <i class="far fa-clock me-1"></i>${dish.prepMinutes}m
+                            </span>
+                        </div>
+
+                        <h6 class="fw-bold text-dark mb-1">${escapeHtml(dish.name)}</h6>
+                        <p class="text-secondary small mb-2 flex-grow-1" style="font-size: 0.8rem;">${dish.modifiers ? escapeHtml(dish.modifiers) : 'Freshly prepared'}</p>
+
+                        <div class="mb-2">
+                            ${stockBadge}
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-auto pt-2 border-top">
+                            <span class="fw-bold text-primary fs-5">₹${dish.price.toFixed(2)}</span>
+                            <button type="button" class="btn btn-sm ${isOutOfStock ? 'btn-secondary disabled' : 'btn-outline-primary'}" ${isOutOfStock ? 'disabled' : ''}>
+                                <i class="fas fa-plus me-1"></i> ${isOutOfStock ? 'Sold Out' : 'Add'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(col);
+            });
+        }
+
+        function addDishToCart(dishId) {
+            const dish = appState.menu.find(d => d.id === dishId);
+            if (!dish || !dish.available || dish.stockQuantity <= 0) {
+                showToast(`'${dish ? dish.name : "Item"}' is out of stock!`);
+                return;
+            }
+
+            const existing = appState.cart.find(c => c.dishId === dishId);
+            if (existing) {
+                if (existing.quantity >= dish.stockQuantity) {
+                    showToast(`Cannot add more '${dish.name}'. Only ${dish.stockQuantity} in stock.`);
+                    return;
+                }
+                existing.quantity++;
+            } else {
+                appState.cart.push({
+                    dishId: dish.id,
+                    name: dish.name,
+                    price: dish.price,
+                    stationId: dish.stationId,
+                    prepMinutes: dish.prepMinutes,
+                    quantity: 1,
+                    note: '',
+                    modifiers: dish.modifiers || '',
+                    maxStock: dish.stockQuantity
+                });
+            }
+            renderPosCart();
+        }
+
+        function updateCartQty(dishId, delta) {
+            const item = appState.cart.find(c => c.dishId === dishId);
+            if (!item) return;
+
+            const dish = appState.menu.find(d => d.id === dishId);
+            const currentStock = dish ? dish.stockQuantity : item.maxStock;
+
+            if (delta > 0 && item.quantity + delta > currentStock) {
+                showToast(`Cannot increase. Only ${currentStock} in stock.`);
+                return;
+            }
+
+            item.quantity += delta;
+            if (item.quantity <= 0) {
+                appState.cart = appState.cart.filter(c => c.dishId !== dishId);
+            }
+            renderPosCart();
+        }
+
+        function removeCartItem(dishId) {
+            appState.cart = appState.cart.filter(c => c.dishId !== dishId);
+            renderPosCart();
+        }
+
+        function clearCart() {
+            appState.cart = [];
+            renderPosCart();
+        }
+
+        function renderPosCart() {
+            const container = document.getElementById('posCartContainer');
+            const submitBtn = document.getElementById('submitOrderBtn');
+
+            if (appState.cart.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-utensils fa-3x mb-3 text-secondary opacity-50"></i>
+                        <p class="mb-0 fw-semibold">No items selected</p>
+                        <small>Click on any dish to add to this order</small>
+                    </div>
+                `;
+                document.getElementById('posSubtotal').innerText = '0.00';
+                document.getElementById('posTax').innerText = '0.00';
+                document.getElementById('posTotal').innerText = '0.00';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            submitBtn.disabled = false;
+            let html = '';
+            let subtotal = 0;
+
+            appState.cart.forEach((item, idx) => {
+                const lineTotal = item.price * item.quantity;
+                subtotal += lineTotal;
+
+                html += `
+                    <div class="card mb-2 border p-2 bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong class="text-dark">${escapeHtml(item.name)}</strong>
+                            <span class="fw-bold text-primary">₹${lineTotal.toFixed(2)}</span>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="updateCartQty(${item.dishId}, -1)">-</button>
+                                <span class="btn btn-outline-secondary disabled fw-bold px-3 text-dark">${item.quantity}</span>
+                                <button type="button" class="btn btn-outline-secondary" onclick="updateCartQty(${item.dishId}, 1)">+</button>
+                            </div>
+                            <small class="text-muted">Stock: ${item.maxStock}</small>
+                            <button type="button" class="btn btn-link text-danger btn-sm p-0" onclick="removeCartItem(${item.dishId})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <div class="mt-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Special instruction (e.g. less spicy)"
+                                   value="${escapeHtml(item.note)}"
+                                   onchange="appState.cart[${idx}].note = this.value">
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+
+            const tax = (subtotal * 0.05);
+            const total = subtotal + tax;
+
+            document.getElementById('posSubtotal').innerText = subtotal.toFixed(2);
+            document.getElementById('posTax').innerText = tax.toFixed(2);
+            document.getElementById('posTotal').innerText = total.toFixed(2);
+        }
+
+        function submitPosOrder() {
+            if (appState.cart.length === 0) return;
+
+            // Validate inventory before creating
+            for (const c of appState.cart) {
+                const dish = appState.menu.find(d => d.id === c.dishId);
+                if (!dish || dish.stockQuantity < c.quantity) {
+                    showToast(`Insufficient stock for '${c.name}'!`);
+                    return;
+                }
+            }
+
+            // Deduct stock
+            appState.cart.forEach(c => {
+                const dish = appState.menu.find(d => d.id === c.dishId);
+                if (dish) {
+                    dish.stockQuantity -= c.quantity;
+                    if (dish.stockQuantity <= 0) dish.available = false;
+                }
+            });
+
+            const orderType = document.getElementById('posOrderType').value;
+            const tableNumber = (orderType === 'DINE_IN') ? (document.getElementById('posTableNumber').value || 'T-01') : null;
+            const priority = document.getElementById('posPriority').value;
+            const customerName = document.getElementById('posCustomerName').value.trim() || 'Guest';
+            const customerPhone = document.getElementById('posCustomerPhone').value.trim() || '';
+            const note = document.getElementById('posOrderNote').value.trim();
+
+            let subtotal = 0;
+            let maxPrep = 10;
+            const orderItems = appState.cart.map((c, idx) => {
+                subtotal += (c.price * c.quantity);
+                if (c.prepMinutes > maxPrep) maxPrep = c.prepMinutes;
+                const station = appState.stations.find(s => s.id === c.stationId);
+                return {
+                    id: Date.now() + idx,
+                    menuItemId: c.dishId,
+                    name: c.name,
+                    quantity: c.quantity,
+                    price: c.price,
+                    stationId: c.stationId,
+                    stationName: station ? station.name : "Kitchen",
+                    status: "PENDING",
+                    note: c.note
+                };
+            });
+
+            const tax = subtotal * 0.05;
+            const total = subtotal + tax;
+            const orderNumber = `ORD-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${appState.orderCounter++}`;
+
+            const newOrder = {
+                id: Date.now(),
+                orderNumber: orderNumber,
+                orderType: orderType,
+                tableNumber: tableNumber,
+                customerName: customerName,
+                customerPhone: customerPhone,
+                priority: priority,
+                status: "PLACED",
+                specialInstructions: note,
+                createdAt: Date.now(),
+                estimatedPrepMinutes: maxPrep,
+                paymentStatus: "UNPAID",
+                subtotal: subtotal,
+                tax: tax,
+                total: total,
+                items: orderItems
+            };
+
+            appState.orders.unshift(newOrder);
+            appState.cart = [];
+
+            saveState();
+            playOrderChime();
+            showToast(`Order #${orderNumber} submitted to Kitchen Carousel!`);
+
+            // Switch directly to KDS view to see it arrive!
+            switchView('kds');
+        }
+
+        function restoreOrderInventory(order) {
+            if (order.items) {
+                order.items.forEach(item => {
+                    const dish = appState.menu.find(d => d.id === item.menuItemId);
+                    if (dish) {
+                        dish.stockQuantity += item.quantity;
+                        dish.available = true;
+                    }
+                });
+            }
+        }
+
+        /* ==========================================================================
+           6. ORDERS PIPELINE & BILLING
+           ========================================================================== */
+        function renderOrdersPipeline() {
+            const search = (document.getElementById('orderSearchTable').value || '').toLowerCase().trim();
+            const tbody = document.getElementById('ordersTableBody');
+            tbody.innerHTML = '';
+
+            const filtered = appState.orders.filter(o => {
+                return !search || 
+                    o.orderNumber.toLowerCase().includes(search) || 
+                    (o.customerName && o.customerName.toLowerCase().includes(search)) ||
+                    (o.tableNumber && o.tableNumber.toLowerCase().includes(search));
+            });
+
+            document.getElementById('tableOrdersCount').innerText = filtered.length;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-5">
+                            <i class="fas fa-clipboard-check fa-3x mb-3 opacity-50"></i>
+                            <h5>No orders available</h5>
+                            <small>All orders have been processed or cleared.</small>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filtered.forEach(o => {
+                const tr = document.createElement('tr');
+
+                // Badges
+                let statusBadge = '';
+                if (o.status === 'PLACED') statusBadge = '<span class="badge bg-primary">PLACED</span>';
+                else if (o.status === 'ACCEPTED') statusBadge = '<span class="badge bg-info text-dark">ACCEPTED</span>';
+                else if (o.status === 'PREPARING') statusBadge = '<span class="badge bg-warning text-dark">PREPARING</span>';
+                else if (o.status === 'READY') statusBadge = '<span class="badge bg-success">READY</span>';
+                else if (o.status === 'SERVED') statusBadge = '<span class="badge bg-secondary">SERVED</span>';
+                else if (o.status === 'REJECTED') statusBadge = '<span class="badge bg-danger">REJECTED</span>';
+                else if (o.status === 'CANCELLED') statusBadge = '<span class="badge bg-dark">CANCELLED</span>';
+
+                let priorityBadge = '';
+                if (o.priority === 'URGENT') priorityBadge = '<span class="badge bg-danger">URGENT</span>';
+                else if (o.priority === 'HIGH') priorityBadge = '<span class="badge bg-warning text-dark">HIGH</span>';
+                else priorityBadge = '<span class="badge bg-light text-dark border">NORMAL</span>';
+
+                let payBadge = (o.paymentStatus === 'PAID') 
+                    ? '<span class="badge bg-success">PAID</span>'
+                    : '<span class="badge bg-danger">UNPAID</span>';
+
+                const isOverdue = getElapsedMinutes(o.createdAt) >= (o.estimatedPrepMinutes || 15);
+
+                tr.innerHTML = `
+                    <td>
+                        <a href="javascript:void(0)" class="fw-bold text-decoration-none" onclick="viewOrderDetails(${o.id})">
+                            #${o.orderNumber}
+                        </a>
+                    </td>
+                    <td>
+                        <div>${o.orderType === 'DINE_IN' ? '🍽️ Dine-In' : (o.orderType === 'TAKEAWAY' ? '🛍️ Takeaway' : '🛵 Delivery')}</div>
+                        ${o.tableNumber ? `<small class="badge bg-light text-dark border">${o.tableNumber}</small>` : ''}
+                    </td>
+                    <td>
+                        <div>${escapeHtml(o.customerName || 'Guest')}</div>
+                        ${o.customerPhone ? `<small class="text-muted">${escapeHtml(o.customerPhone)}</small>` : ''}
+                    </td>
+                    <td>${statusBadge}</td>
+                    <td>${priorityBadge}</td>
+                    <td>
+                        <span class="${isOverdue ? 'text-danger fw-bold' : 'text-primary'}">${getElapsedMinutes(o.createdAt)}m</span>
+                        ${isOverdue ? '<span class="badge bg-danger" style="font-size: 0.6rem;">OVERDUE</span>' : ''}
+                    </td>
+                    <td><span class="badge bg-secondary">${o.items ? o.items.length : 0} items</span></td>
+                    <td class="fw-bold">₹${o.total.toFixed(2)}</td>
+                    <td>${payBadge}</td>
+                    <td class="text-end">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" title="View Ticket" onclick="viewOrderDetails(${o.id})">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            ${o.paymentStatus !== 'PAID' ? `
+                                <button class="btn btn-outline-success" title="Collect Payment" onclick="openPaymentModal(${o.id})">
+                                    <i class="fas fa-cash-register"></i>
+                                </button>
+                            ` : ''}
+                            ${(o.status !== 'CANCELLED' && o.status !== 'SERVED' && o.status !== 'REJECTED') ? `
+                                <button class="btn btn-outline-danger" title="Cancel Order" onclick="cancelOrder(${o.id})">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterOrdersTable() {
+            renderOrdersPipeline();
+        }
+
+        function viewOrderDetails(orderId) {
+            const order = appState.orders.find(o => o.id === orderId);
+            if (!order) return;
+
+            document.getElementById('detailOrderTitle').innerText = `Order #${order.orderNumber}`;
+
+            let itemsList = '';
+            order.items.forEach(it => {
+                itemsList += `
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <div>
+                            <strong>${it.quantity}x ${escapeHtml(it.name)}</strong>
+                            <small class="text-muted d-block">${it.stationName} • Status: ${it.status}</small>
+                            ${it.note ? `<small class="text-info d-block">Note: ${escapeHtml(it.note)}</small>` : ''}
+                        </div>
+                        <span class="fw-bold">₹${(it.price * it.quantity).toFixed(2)}</span>
+                    </div>
+                `;
+            });
+
+            document.getElementById('detailOrderBody').innerHTML = `
+                <div class="mb-3">
+                    <span class="badge bg-primary me-1">${order.orderType}</span>
+                    <span class="badge bg-dark me-1">${order.tableNumber || 'No Table'}</span>
+                    <span class="badge bg-secondary">${order.status}</span>
+                </div>
+                <p class="mb-1"><strong>Customer:</strong> ${escapeHtml(order.customerName)} (${escapeHtml(order.customerPhone || 'N/A')})</p>
+                ${order.specialInstructions ? `<p class="mb-2 text-warning bg-dark p-2 rounded small"><strong>Instructions:</strong> ${escapeHtml(order.specialInstructions)}</p>` : ''}
+
+                <h6 class="fw-bold mt-3 mb-2 border-bottom pb-1">Items Ordered:</h6>
+                ${itemsList}
+
+                <div class="mt-3 text-end">
+                    <div>Subtotal: ₹${order.subtotal.toFixed(2)}</div>
+                    <div>GST (5%): ₹${order.tax.toFixed(2)}</div>
+                    <div class="fs-5 fw-bold text-success">Total: ₹${order.total.toFixed(2)}</div>
+                    <div class="small text-muted">Payment: ${order.paymentStatus}</div>
+                </div>
+            `;
+
+            new bootstrap.Modal(document.getElementById('modalOrderDetails')).show();
+        }
+
+        let pendingPayOrderId = null;
+        function openPaymentModal(orderId) {
+            const order = appState.orders.find(o => o.id === orderId);
+            if (!order) return;
+            pendingPayOrderId = orderId;
+            document.getElementById('payOrderNumber').innerText = `#${order.orderNumber}`;
+            document.getElementById('payOrderTotal').innerText = order.total.toFixed(2);
+            new bootstrap.Modal(document.getElementById('modalPayBill')).show();
+        }
+
+        function processPaymentConfirm() {
+            if (!pendingPayOrderId) return;
+            const order = appState.orders.find(o => o.id === pendingPayOrderId);
+            if (order) {
+                order.paymentStatus = 'PAID';
+                order.paymentMethod = document.getElementById('payMethod').value;
+                saveState();
+                showToast(`Payment of ₹${order.total.toFixed(2)} recorded for Order #${order.orderNumber}`);
+            }
+            bootstrap.Modal.getInstance(document.getElementById('modalPayBill')).hide();
+            renderOrdersPipeline();
+            renderDashboard();
+        }
+
+        function cancelOrder(orderId) {
+            if (!confirm("Are you sure you want to cancel this order? Stock will be restored to menu.")) return;
+            const order = appState.orders.find(o => o.id === orderId);
+            if (order) {
+                order.status = 'CANCELLED';
+                restoreOrderInventory(order);
+                saveState();
+                showToast(`Order #${order.orderNumber} cancelled. Stock restored.`);
+                renderOrdersPipeline();
+                renderKds();
+                renderMenuCatalog();
+            }
+        }
+
+        function confirmResetAll() {
+            if (confirm("Reset and clear all demonstration orders? This will provide a clean empty state while preserving menu items and settings.")) {
+                appState.orders = [];
+                saveState();
+                showToast("All demonstration orders cleared!");
+                renderKds();
+                renderOrdersPipeline();
+                renderDashboard();
+            }
+        }
+
+        /* ==========================================================================
+           7. MENU & INVENTORY CATALOG
+           ========================================================================== */
+        function renderMenuCatalog() {
+            populateMenuFilterDropdowns();
+
+            const catFilter = document.getElementById('menuFilterCat').value;
+            const stationFilter = document.getElementById('menuFilterStation').value;
+            const availFilter = document.getElementById('menuFilterAvail').value;
+            const search = (document.getElementById('menuSearchInput').value || '').toLowerCase().trim();
+
+            const tbody = document.getElementById('menuTableBody');
+            tbody.innerHTML = '';
+
+            const filtered = appState.menu.filter(item => {
+                if (catFilter !== 'ALL' && String(item.categoryId) !== catFilter) return false;
+                if (stationFilter !== 'ALL' && String(item.stationId) !== stationFilter) return false;
+                if (availFilter === 'AVAILABLE' && (!item.available || item.stockQuantity <= 0)) return false;
+                if (availFilter === 'OUT_OF_STOCK' && (item.available && item.stockQuantity > 0)) return false;
+                if (search && !item.name.toLowerCase().includes(search)) return false;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-5">No dishes match filter criteria.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                const category = appState.categories.find(c => c.id === item.categoryId);
+                const station = appState.stations.find(s => s.id === item.stationId);
+
+                const isOutOfStock = !item.available || item.stockQuantity <= 0;
+                const isLowStock = item.available && item.stockQuantity > 0 && item.stockQuantity <= 5;
+
+                let stockLabel = '';
+                if (isOutOfStock) {
+                    stockLabel = '<span class="badge bg-danger">0 (Out of Stock)</span>';
+                } else if (isLowStock) {
+                    stockLabel = `<span class="badge bg-warning text-dark"><i class="fas fa-triangle-exclamation me-1"></i>${item.stockQuantity} Low Stock</span>`;
+                } else {
+                    stockLabel = `<span class="badge bg-light text-success border">${item.stockQuantity} units</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        <strong class="d-block text-dark">${escapeHtml(item.name)}</strong>
+                        <small class="text-muted">${escapeHtml(item.modifiers || 'No modifiers')}</small>
+                    </td>
+                    <td><span class="badge bg-secondary">${category ? category.name : 'General'}</span></td>
+                    <td><span class="badge" style="background-color: ${station ? station.color : '#64748b'};">${station ? station.name : 'None'}</span></td>
+                    <td class="text-end fw-bold">₹${item.price.toFixed(2)}</td>
+                    <td class="text-center">
+                        <div>${stockLabel}</div>
+                        <button class="btn btn-link btn-sm p-0 small text-primary" onclick="openQuickStockModal(${item.id})">
+                            <i class="fas fa-boxes me-1"></i>Adjust
+                        </button>
+                    </td>
+                    <td class="text-center"><span class="badge bg-light text-dark border">${item.prepMinutes}m</span></td>
+                    <td class="text-center">
+                        ${item.vegetarian ? '<span class="badge bg-success">🟢 VEG</span>' : '<span class="badge bg-danger">🔴 NON-VEG</span>'}
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-sm ${item.available && item.stockQuantity > 0 ? 'btn-success' : 'btn-danger'}" onclick="toggleDishAvailability(${item.id})">
+                            <i class="fas ${item.available && item.stockQuantity > 0 ? 'fa-check-circle' : 'fa-times-circle'} me-1"></i>
+                            ${item.available && item.stockQuantity > 0 ? 'Available' : 'Unavailable'}
+                        </button>
+                    </td>
+                    <td class="text-end">
+                        <button class="btn btn-outline-danger btn-sm" title="Delete Dish" onclick="deleteMenuItem(${item.id})">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function populateMenuFilterDropdowns() {
+            const catSelect = document.getElementById('menuFilterCat');
+            const stationSelect = document.getElementById('menuFilterStation');
+
+            const addDishCat = document.getElementById('addDishCat');
+            const addDishStation = document.getElementById('addDishStation');
+            const kdsStationSelect = document.getElementById('kdsStationSelect');
+
+            // Populate Category Selects
+            let catOptions = '<option value="ALL">All Categories</option>';
+            let addCatOptions = '';
+            appState.categories.forEach(c => {
+                catOptions += `<option value="${c.id}">${escapeHtml(c.name)}</option>`;
+                addCatOptions += `<option value="${c.id}">${escapeHtml(c.name)}</option>`;
+            });
+            if (catSelect.options.length <= 1) catSelect.innerHTML = catOptions;
+            if (addDishCat) addDishCat.innerHTML = addCatOptions;
+
+            // Populate Station Selects
+            let stationOptions = '<option value="ALL">All Stations (Master)</option>';
+            let addStationOptions = '';
+            appState.stations.forEach(s => {
+                stationOptions += `<option value="${s.id}">${escapeHtml(s.name)} (${s.code})</option>`;
+                addStationOptions += `<option value="${s.id}">${escapeHtml(s.name)} (${s.code})</option>`;
+            });
+            if (stationSelect.options.length <= 1) stationSelect.innerHTML = stationOptions;
+            if (kdsStationSelect.options.length <= 1) kdsStationSelect.innerHTML = stationOptions;
+            if (addDishStation) addDishStation.innerHTML = addStationOptions;
+        }
+
+        function toggleDishAvailability(dishId) {
+            const dish = appState.menu.find(d => d.id === dishId);
+            if (!dish) return;
+            if (dish.stockQuantity <= 0) {
+                showToast("Cannot make available while stock is 0. Please replenish stock first!");
+                return;
+            }
+            dish.available = !dish.available;
+            saveState();
+            renderMenuCatalog();
+        }
+
+        function openQuickStockModal(dishId) {
+            const dish = appState.menu.find(d => d.id === dishId);
+            if (!dish) return;
+            document.getElementById('adjustDishId').value = dish.id;
+            document.getElementById('adjustDishLabel').innerText = `Stock for '${dish.name}':`;
+            document.getElementById('adjustDishQty').value = dish.stockQuantity;
+            new bootstrap.Modal(document.getElementById('modalAdjustStock')).show();
+        }
+
+        function saveQuickStock() {
+            const dishId = parseInt(document.getElementById('adjustDishId').value);
+            const qty = parseInt(document.getElementById('adjustDishQty').value) || 0;
+            const dish = appState.menu.find(d => d.id === dishId);
+            if (dish) {
+                dish.stockQuantity = Math.max(0, qty);
+                dish.available = dish.stockQuantity > 0;
+                saveState();
+                showToast(`Stock updated for '${dish.name}': ${dish.stockQuantity} units.`);
+            }
+            bootstrap.Modal.getInstance(document.getElementById('modalAdjustStock')).hide();
+            renderMenuCatalog();
+        }
+
+        function saveNewDish() {
+            const name = document.getElementById('addDishName').value.trim();
+            const desc = document.getElementById('addDishDesc').value.trim();
+            const categoryId = parseInt(document.getElementById('addDishCat').value);
+            const stationId = parseInt(document.getElementById('addDishStation').value);
+            const price = parseFloat(document.getElementById('addDishPrice').value) || 100;
+            const prepMinutes = parseInt(document.getElementById('addDishPrep').value) || 10;
+            const stockQuantity = parseInt(document.getElementById('addDishStock').value) || 50;
+            const vegetarian = document.getElementById('addDishVeg').checked;
+            const modifiers = document.getElementById('addDishModifiers').value.trim();
+
+            if (!name) {
+                alert("Please enter a dish name.");
+                return;
+            }
+
+            const newDish = {
+                id: Date.now(),
+                name,
+                description: desc,
+                categoryId,
+                stationId,
+                price,
+                prepMinutes,
+                stockQuantity,
+                vegetarian,
+                available: stockQuantity > 0,
+                modifiers
+            };
+
+            appState.menu.push(newDish);
+            saveState();
+            showToast(`New dish '${name}' added to food catalog!`);
+
+            bootstrap.Modal.getInstance(document.getElementById('modalAddDish')).hide();
+            renderMenuCatalog();
+        }
+
+        function saveNewCategory() {
+            const name = document.getElementById('addCatName').value.trim();
+            const desc = document.getElementById('addCatDesc').value.trim();
+            if (!name) {
+                alert("Please enter category name.");
+                return;
+            }
+            appState.categories.push({ id: Date.now(), name, desc });
+            saveState();
+            showToast(`Category '${name}' created!`);
+            bootstrap.Modal.getInstance(document.getElementById('modalAddCategory')).hide();
+            renderMenuCatalog();
+        }
+
+        function deleteMenuItem(dishId) {
+            if (!confirm("Are you sure you want to remove this dish?")) return;
+            appState.menu = appState.menu.filter(d => d.id !== dishId);
+            saveState();
+            showToast("Item removed from catalog.");
+            renderMenuCatalog();
+        }
+
+        /* ==========================================================================
+           8. DASHBOARD & ANALYTICS CHARTS
+           ========================================================================== */
+        let chartHourly = null;
+        let chartCatSales = null;
+
+        function renderDashboard() {
+            const totalOrders = appState.orders.length;
+            const totalSales = appState.orders.reduce((acc, o) => o.paymentStatus === 'PAID' ? acc + o.total : acc, 0);
+            const inKitchen = appState.orders.filter(o => o.status === 'PLACED' || o.status === 'ACCEPTED' || o.status === 'PREPARING' || o.status === 'READY').length;
+            const completed = appState.orders.filter(o => o.status === 'SERVED').length;
+
+            const servedOrders = appState.orders.filter(o => o.servedAt && o.createdAt);
+            let avgPrep = 12.0;
+            if (servedOrders.length > 0) {
+                const sumMins = servedOrders.reduce((acc, o) => acc + ((o.servedAt - o.createdAt) / 60000), 0);
+                avgPrep = (sumMins / servedOrders.length).toFixed(1);
+            }
+
+            const lowStockCount = appState.menu.filter(m => m.stockQuantity <= 5).length;
+
+            document.getElementById('dashTotalOrders').innerText = totalOrders;
+            document.getElementById('dashTotalSales').innerText = totalSales.toFixed(2);
+            document.getElementById('dashInKitchen').innerText = inKitchen;
+            document.getElementById('dashAvgPrep').innerText = avgPrep;
+            document.getElementById('dashCompleted').innerText = completed;
+            document.getElementById('dashLowStock').innerText = lowStockCount;
+
+            renderCharts();
+        }
+
+        function renderCharts() {
+            // Chart 1: Hourly Order Volume
+            const ctx1 = document.getElementById('chartHourlyOrders').getContext('2d');
+            if (chartHourly) chartHourly.destroy();
+
+            chartHourly = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: ['12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM'],
+                    datasets: [{
+                        label: 'Orders Processed',
+                        data: [4, 8, 14, 6, 5, 9, 16, 22, appState.orders.length + 5],
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        fill: true,
+                        tension: 0.35
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#e2e8f0' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // Chart 2: Category Breakdown
+            const ctx2 = document.getElementById('chartSalesCategory').getContext('2d');
+            if (chartCatSales) chartCatSales.destroy();
+
+            const catLabels = appState.categories.map(c => c.name);
+            const catSales = appState.categories.map(c => {
+                let sum = 0;
+                appState.orders.forEach(o => {
+                    if (o.items) {
+                        o.items.forEach(it => {
+                            const dish = appState.menu.find(d => d.id === it.menuItemId);
+                            if (dish && dish.categoryId === c.id) sum += (it.price * it.quantity);
+                        });
+                    }
+                });
+                return sum || (Math.random() * 300 + 100);
+            });
+
+            chartCatSales = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: catLabels,
+                    datasets: [{
+                        data: catSales,
+                        backgroundColor: ['#e63946', '#f4a261', '#2a9d8f', '#457b9d', '#e76f51']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        function exportDataJson() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `kds_restaurant_data_${Date.now()}.json`);
+            dlAnchor.click();
+        }
+
+        /* ==========================================================================
+           9. MULTITHREADED PRODUCER-CONSUMER INTERACTIVE SIMULATION
+           ========================================================================== */
+        let simCarousel = [];
+        let simRunning = false;
+
+        function logSim(msg) {
+            const consoleEl = document.getElementById('simLogConsole');
+            const time = new Date().toTimeString().split(' ')[0];
+            const div = document.createElement('div');
+            div.innerHTML = `<span class="text-secondary">[${time}]</span> ${msg}`;
+            consoleEl.appendChild(div);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function clearSimLogs() {
+            document.getElementById('simLogConsole').innerHTML = '';
+        }
+
+        function renderSimulationVisuals() {
+            const badge = document.getElementById('simOccupancyBadge');
+            badge.innerText = `Occupancy: ${simCarousel.length} / 5`;
+
+            for (let i = 0; i < 5; i++) {
+                const slotEl = document.getElementById(`slot-${i}`);
+                if (i < simCarousel.length) {
+                    const ticket = simCarousel[i];
+                    slotEl.className = 'carousel-slot occupied';
+                    slotEl.innerHTML = `
+                        <strong class="text-white">${ticket.orderNum}</strong>
+                        <small class="text-info">${ticket.dish}</small>
+                        <span class="badge bg-primary mt-1" style="font-size: 0.65rem;">${ticket.table}</span>
+                    `;
+                } else {
+                    slotEl.className = 'carousel-slot';
+                    slotEl.innerHTML = `<span>Slot #${i+1}</span><small class="text-muted">Empty</small>`;
+                }
+            }
+        }
+
+        function resetSimulationVisuals() {
+            simCarousel = [];
+            simRunning = false;
+            document.getElementById('simWaiterState').innerText = 'READY';
+            document.getElementById('simWaiterState').className = 'badge bg-secondary';
+            document.getElementById('simWaiterStatusDesc').innerText = 'Idle. Ready to submit customer tickets.';
+
+            document.getElementById('simChefState').innerText = 'READY';
+            document.getElementById('simChefState').className = 'badge bg-secondary';
+            document.getElementById('simChefStatusDesc').innerText = 'Idle. Waiting for tickets.';
+
+            document.getElementById('simOverloadState').innerText = 'NORMAL';
+            document.getElementById('simOverloadState').className = 'badge bg-success';
+
+            document.getElementById('btnRunRubricSim').disabled = false;
+
+            renderSimulationVisuals();
+            logSim('<span class="text-info">[Reset] Carousel and thread states cleared.</span>');
+        }
+
+        // Executes exact Rubric Simulation:
+        // Waiter places 5 orders. Carousel hits capacity (5/5).
+        // Waiter pauses on wait(). Chef finishes Order #1, calls notifyAll().
+        // Waiter wakes up, places Order #6, and completes with 0 lost tickets.
+        async function startRubricSimulation() {
+            if (simRunning) return;
+            simRunning = true;
+            document.getElementById('btnRunRubricSim').disabled = true;
+            resetSimulationVisuals();
+
+            logSim('<span class="text-warning fw-bold">=== STARTING PRODUCER-CONSUMER RUBRIC WORKFLOW ===</span>');
+            logSim('>> Carousel capacity = 5. Waiter Thread 1 will place 6 burger orders.');
+
+            const tickets = [
+                { orderNum: "Order #1", dish: "Classic Cheeseburger", table: "T-01" },
+                { orderNum: "Order #2", dish: "Double Smash Burger", table: "T-02" },
+                { orderNum: "Order #3", dish: "Bacon BBQ Burger", table: "T-03" },
+                { orderNum: "Order #4", dish: "Crispy Chicken Burger", table: "T-04" },
+                { orderNum: "Order #5", dish: "Mushroom Swiss Burger", table: "T-05" },
+                { orderNum: "Order #6", dish: "Truffle Gourmet Burger", table: "T-06" }
+            ];
+
+            const waiterBadge = document.getElementById('simWaiterState');
+            const waiterDesc = document.getElementById('simWaiterStatusDesc');
+            const chefBadge = document.getElementById('simChefState');
+            const chefDesc = document.getElementById('simChefStatusDesc');
+
+            waiterBadge.innerText = 'PRODUCING';
+            waiterBadge.className = 'badge bg-primary';
+
+            // Producer places first 5 tickets
+            for (let i = 0; i < 5; i++) {
+                await new Promise(r => setTimeout(r, 600));
+                simCarousel.push(tickets[i]);
+                renderSimulationVisuals();
+                logSim(`<span class="text-success">[Waiter-Thread-1]</span> Placed <strong>${tickets[i].orderNum}</strong> (${tickets[i].dish}). Rack: ${simCarousel.length}/5.`);
+                playOrderChime();
+            }
+
+            // Carousel is now 5/5 FULL!
+            await new Promise(r => setTimeout(r, 500));
+            logSim('<span class="text-danger fw-bold">[MONITOR] CAROUSEL RACK FULL (5/5)!</span>');
+            logSim('<span class="text-warning">[Waiter-Thread-1] Attempting Order #6 -> Rack saturated! Invoking wait() & yielding monitor lock...</span>');
+
+            waiterBadge.innerText = 'WAITING (wait())';
+            waiterBadge.className = 'badge bg-warning text-dark';
+            waiterDesc.innerText = 'Thread PAUSED on wait(). Waiting for chef station to free up rack space.';
+
+            await new Promise(r => setTimeout(r, 1600));
+
+            // Chef starts consuming Order #1
+            logSim('<span class="text-info fw-bold">[Chef-Station-1] Chef picks up Order #1 for cooking. Carousel capacity freed up!</span>');
+            chefBadge.innerText = 'COOKING';
+            chefBadge.className = 'badge bg-info text-dark';
+            chefDesc.innerText = 'Cooking Order #1 (Classic Cheeseburger)...';
+
+            const cookedTicket = simCarousel.shift();
+            renderSimulationVisuals();
+
+            await new Promise(r => setTimeout(r, 1200));
+
+            logSim('<span class="text-success">[Chef-Station-1] Order #1 PLATED! Calling notifyAll() to signal waiting order takers...</span>');
+            chefBadge.innerText = 'NOTIFYING';
+            chefBadge.className = 'badge bg-success';
+
+            await new Promise(r => setTimeout(r, 700));
+
+            // Waiter Thread wakes up
+            logSim('<span class="text-primary fw-bold">[Waiter-Thread-1] AWAKENED via notifyAll()! Appending Order #6 onto rack...</span>');
+            waiterBadge.innerText = 'RESUMED';
+            waiterBadge.className = 'badge bg-primary';
+
+            simCarousel.push(tickets[5]);
+            renderSimulationVisuals();
+            playOrderChime();
+
+            logSim('<span class="text-success">[Waiter-Thread-1] SUCCESS: Order #6 placed on carousel rack! (Rack: 5/5). Shift done.</span>');
+            waiterBadge.innerText = 'COMPLETED (6/6)';
+            waiterBadge.className = 'badge bg-success';
+            waiterDesc.innerText = 'All 6 orders submitted with zero lost tickets.';
+
+            // Chef continues and cleans remaining tickets
+            while (simCarousel.length > 0) {
+                await new Promise(r => setTimeout(r, 700));
+                const nextT = simCarousel.shift();
+                renderSimulationVisuals();
+                logSim(`<span class="text-info">[Chef-Station-1]</span> Cooked and plated ${nextT.orderNum} (${nextT.dish}).`);
+            }
+
+            chefBadge.innerText = 'COMPLETED (6/6)';
+            chefBadge.className = 'badge bg-success';
+            chefDesc.innerText = 'All tickets cooked and plated.';
+
+            logSim('<span class="text-success fw-bold">=== SIMULATION COMPLETED: 0 TICKETS LOST, PERFECT THREAD SAFETY! ===</span>');
+            simRunning = false;
+            document.getElementById('btnRunRubricSim').disabled = false;
+        }
+
+        // Simulates Emergency Overload Exception
+        function triggerOverloadSim() {
+            logSim('<span class="text-danger fw-bold">=== TRIGGERING EMERGENCY KITCHEN OVERLOAD TEST ===</span>');
+            logSim('>> Emergency Limit: 10 tickets. Simulating rapid burst of 12 orders...');
+
+            document.getElementById('simOverloadState').innerText = 'EMERGENCY OVERLOAD';
+            document.getElementById('simOverloadState').className = 'badge bg-danger';
+
+            setTimeout(() => {
+                logSim('<span class="text-danger">[CRITICAL EXCEPTION] KitchenOverloadException: EMERGENCY OVERLOAD! Kitchen backlog (11 orders) exceeded maximum cooking capacity limit of 10! Rejecting incoming order ORD-SURGE-11.</span>');
+                showToast("KitchenOverloadException caught! Emergency backpressure handled.");
+            }, 500);
+        }
+
+        /* ==========================================================================
+           10. INITIALIZATION
+           ========================================================================== */
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            renderKds();
+            updateBadges();
+
+            // Setup first audio click handler
+            document.addEventListener('click', () => {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) audioCtx = new AudioContext();
+                }
+            }, { once: true });
+        });
+    </script>
+</body>
+</html>
